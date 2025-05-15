@@ -1,0 +1,1 @@
+# fundusz-mim-informatyka
