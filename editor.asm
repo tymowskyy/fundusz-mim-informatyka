@@ -2,11 +2,17 @@ section .data
     orig_termios_buf times 64 db 0     ; buffer to save original termios
     termios_buf     times 64 db 0      ; buffer to modify termios
     input_char      db 0
-    default_str    db 'ABCDE', 10,  0
+    default_str    db '                    ', 10,  0
     cursor_col    dd 0            ; Column within that line
+    show_cursor db 0x1B, '[?25h', 0  ;
+    esc_sequence db 27, '[4A'
+    up     db 27, '[A', 0         ; ESC [ A (move up)
+    down   db 27, '[B', 0         ; ESC [ B (move down)
+    right  db 27, '[C', 0         ; ESC [ C (move right)
+    left   db 27, '[D', 0         ; ESC [ D (move left)
     
 section .bss
-    lines_buffer  resb 1024 * 7
+    lines_buffer  resb 1024 * 22
     line_pointers resq 1024         ; Pointers to each line (64-bit)
     line_lengths  resd 1024         ; Lengths of each line
     num_lines     resd 1            ; Total lines
@@ -17,6 +23,13 @@ section .text
     global _start
 
 _start:
+    mov rax, 1              ; sys_write
+    mov rdi, 1              ; file descriptor: STDOUT
+    mov rsi, show_cursor    ; pointer to the string
+    mov rdx, 6              ; length of the ANSI code
+    syscall
+
+
     mov dword [cursor_col], 0
     ; rsi = address of default_str
     lea rsi, [default_str]
@@ -33,7 +46,7 @@ _start:
     mov [rdi], rbx
 
     ; copy 7 bytes from default_str to current buffer location
-    mov rdx, 7
+    mov rdx, 22
 .copy_str:
     mov al, [rsi + rdx - 1]
     mov [rbx + rdx - 1], al
@@ -42,7 +55,7 @@ _start:
 
     ; advance pointers
     add rdi, 8        ; move to next line_pointers entry
-    add rbx, 7        ; move to next buffer slot
+    add rbx, 22        ; move to next buffer slot
     loop .copy_loop1
 
     ; Get original terminal settings (TCGETS)
@@ -74,6 +87,25 @@ _start:
     mov rdi, 0
     mov rsi, 0x5402
     lea rdx, [rel termios_buf]
+    syscall
+
+.print_lines:
+
+    mov r8, 0
+.print_loop:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, [line_pointers + 8*r8]
+    mov rdx, 21
+    syscall
+    inc r8
+    cmp r8, 4
+    jl .print_loop
+
+    mov rax, 1              ; syscall: write
+    mov rdi, 1              ; file descriptor: stdout
+    mov rsi, esc_sequence   ; pointer to string
+    mov rdx, 4              ; length of string
     syscall
 
 .loop_input:
@@ -115,22 +147,46 @@ _start:
     jmp .loop_input
 
 .arrow_left:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, left
+    mov rdx, 3
+    syscall
+
     cmp dword [cursor_col], 0
     je .loop_input
     dec dword [cursor_col]
     jmp .loop_input
 
 .arrow_right:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, right
+    mov rdx, 3
+    syscall
+
     inc dword [cursor_col]
     jmp .loop_input
 
 .arrow_up:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, up
+    mov rdx, 3
+    syscall
+
     cmp dword [current_line], 0
     je .loop_input
     dec dword [current_line]
     jmp .loop_input
 
 .arrow_down:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, down
+    mov rdx, 3
+    syscall
+
     inc dword [current_line]
     jmp .loop_input
 
@@ -143,20 +199,12 @@ _start:
     mov rax, [line_pointers + 8*rcx]
     mov byte [rax + rdx], dil
     inc dword [cursor_col]
+    mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    lea rsi, [input_char]             ; Address of the input character
+    mov rdx, 1                        ; Length of the character (1 byte)
+    syscall    
 
-    jmp .print_lines
-
-.print_lines:
-    mov r8, 0
-.print_loop:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, [line_pointers + 8*r8]
-    mov rdx, 6
-    syscall
-    inc r8
-    cmp r8, 4
-    jl .print_loop
     jmp .loop_input
 
 
