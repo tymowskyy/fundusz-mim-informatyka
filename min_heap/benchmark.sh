@@ -1,6 +1,6 @@
 g++ -no-pie -o heap_std heap_benchmark_std.cpp -O3
 nasm -f elf64 heap.asm -o heap.o
-g++ -no-pie -o heap_my heap_benchmark.cpp heap.o
+g++ -no-pie -o heap_my heap_benchmark.cpp heap.o -O3
 echo 1 > seed
 python3 gen_test.py < seed > test
 echo my

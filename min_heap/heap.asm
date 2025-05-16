@@ -37,9 +37,9 @@ pop: ; heap-rdi
     mov rcx, [rdi]
     mov rax, [rdi + 8]
 
-    lea rbx, [rdi + 8*rcx]
-    mov rbx, [rbx]
-    mov [rdi + 8], rbx
+    lea r10, [rdi + 8*rcx]
+    mov r10, [r10]
+    mov [rdi + 8], r10
     ; mov [rdi + 8], [rdi + 8*rcx]
 
     dec qword [rdi]
@@ -59,9 +59,9 @@ pop: ; heap-rdi
     cmp r9, rcx
     jge .heapleft
 
-    lea rbx, [rdi + 8*r9]
-    mov rbx, [rbx]
-    cmp [rdi + 8*r8], rbx
+    lea r10, [rdi + 8*r9]
+    mov r10, [r10]
+    cmp [rdi + 8*r8], r10
 
     jle .heapleft
 
