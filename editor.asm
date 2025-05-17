@@ -2,14 +2,19 @@ section .data
     orig_termios_buf times 64 db 0     ; buffer to save original termios
     termios_buf     times 64 db 0      ; buffer to modify termios
     input_char      db 0
-    default_str    db '                    ', 10,  0
+    default_str    db 'xxxxxxxxxxxxxxxxxxxx', 10,  0
+    ;default_str    db '                    ', 10,  0
+
     cursor_col    dd 0            ; Column within that line
     show_cursor db 0x1B, '[?25h', 0  ;
-    esc_sequence db 27, '[4A'
     up     db 27, '[A', 0         ; ESC [ A (move up)
     down   db 27, '[B', 0         ; ESC [ B (move down)
     right  db 27, '[C', 0         ; ESC [ C (move right)
     left   db 27, '[D', 0         ; ESC [ D (move left)
+    clear db 27, '[2J', 27, '[H', 0
+    home db 27, '[H', 0
+    save_cursor db 27, '[s', 0
+    restore_cursor db 27, '[u', 0
     
 section .bss
     lines_buffer  resb 1024 * 22
@@ -29,6 +34,12 @@ _start:
     mov rdx, 6              ; length of the ANSI code
     syscall
 
+
+    mov rax, 1              ; sys_write
+    mov rdi, 1              ; file descriptor: STDOUT
+    mov rsi, clear    ; pointer to the string
+    mov rdx, 7              ; length of the ANSI code
+    syscall
 
     mov dword [cursor_col], 0
     ; rsi = address of default_str
@@ -87,25 +98,6 @@ _start:
     mov rdi, 0
     mov rsi, 0x5402
     lea rdx, [rel termios_buf]
-    syscall
-
-.print_lines:
-
-    mov r8, 0
-.print_loop:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, [line_pointers + 8*r8]
-    mov rdx, 21
-    syscall
-    inc r8
-    cmp r8, 4
-    jl .print_loop
-
-    mov rax, 1              ; syscall: write
-    mov rdi, 1              ; file descriptor: stdout
-    mov rsi, esc_sequence   ; pointer to string
-    mov rdx, 4              ; length of string
     syscall
 
 .loop_input:
@@ -199,10 +191,40 @@ _start:
     mov rax, [line_pointers + 8*rcx]
     mov byte [rax + rdx], dil
     inc dword [cursor_col]
+
     mov rax, 1                        ; sys_write syscall
     mov rdi, 1                        ; STDOUT (file descriptor 1)
-    lea rsi, [input_char]             ; Address of the input character
-    mov rdx, 1                        ; Length of the character (1 byte)
+    mov rsi, save_cursor             ; Address of the input character
+    mov rdx, 3                       ; Length of the character (1 byte)
+    syscall    
+    mov rax, 1              ; sys_write
+    mov rdi, 1              ; file descriptor: STDOUT
+    mov rsi, home    ; pointer to the string
+    mov rdx, 3              ; length of the ANSI code
+    syscall
+.print_lines:
+
+    mov r8, 0
+.print_loop:
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, [line_pointers + 8*r8]
+    mov rdx, 21
+    syscall
+    inc r8
+    cmp r8, 4
+    jl .print_loop
+
+
+        mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    mov rsi, restore_cursor             ; Address of the input character
+    mov rdx, 3                        ; Length of the character (1 byte)
+    syscall    
+        mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    mov rsi, right             ; Address of the input character
+    mov rdx, 3                        ; Length of the character (1 byte)
     syscall    
 
     jmp .loop_input
@@ -220,3 +242,5 @@ _start:
     mov rax, 60                      ; syscall: exit
     xor rdi, rdi
     syscall
+
+
