@@ -2,7 +2,9 @@ section .data
     orig_termios_buf times 64 db 0     ; buffer to save original termios
     termios_buf     times 64 db 0      ; buffer to modify termios
     input_char      db 0
-    default_str    db 'xxxxxxxxxxxxxxxxxxxx', 10,  0
+    default_str:
+        times 128 db 'x', 10
+        db 0
     ;default_str    db '                    ', 10,  0
     nl db 10, 0
 
@@ -17,11 +19,16 @@ section .data
     save_cursor db 27, '[s', 0
     restore_cursor db 27, '[u', 0
     clear_line db 27, '[2K', 0
+    gray db 27, '[48', 59, '5', 59, '240m', 0
+    reset_color db 27, '[0m', 0
+    spaces:
+        times 32 db 'a',
+        db 10
     displayed_lines_num dd 8
 
     
 section .bss
-    lines_buffer  resb 1024 * 22
+    lines_buffer  resb 1024 * 129
     line_pointers resq 1024         ; Pointers to each line (64-bit)
     line_lengths  resd 1024         ; Lengths of each line
     num_lines     resd 1            ; Total lines
@@ -36,7 +43,7 @@ section .text
     global _start
 
 _start:
-    mov dword [num_lines], 20
+    mov dword [num_lines], 1
     mov rbx, rsp              ; save stack pointer
     mov rdi, [rbx]            ; argc
     cmp rdi, 2                ; check if argc >= 2
@@ -83,7 +90,7 @@ _start:
     mov [rdi], rbx
 
     ; copy 7 bytes from default_str to current buffer location
-    mov rdx, 22
+    mov rdx, 129
 .copy_str:
     mov al, [rsi + rdx - 1]
     mov [rbx + rdx - 1], al
@@ -92,7 +99,7 @@ _start:
 
     ; advance pointers
     add rdi, 8        ; move to next line_pointers entry
-    add rbx, 22        ; move to next buffer slot
+    add rbx, 129        ; move to next buffer slot
     loop .copy_loop1
 
     ; Get original terminal settings (TCGETS)
@@ -126,6 +133,7 @@ _start:
     lea rdx, [rel termios_buf]
     syscall
 
+    jmp .print_lines
 .loop_input:
     ; Read first byte
     mov rax, 0
@@ -215,8 +223,15 @@ _start:
 
 .arrow_down:
     inc dword [current_line]
-
     mov eax, [cursor_line]
+    
+    cmp eax, [num_lines]
+    jl .not_new
+
+    inc dword [num_lines]
+
+.not_new:
+
     inc dword eax
     cmp eax, [displayed_lines_num]
     jge .scroll_down
@@ -349,6 +364,23 @@ _start:
     cmp r8, r9
     jl .print_loop
 
+
+    mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    mov rsi, gray             ; Address of the input character
+    mov rdx, 12                        ; Length of the character (1 byte)
+    syscall
+    mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    mov rsi, [arg_point]             ; Address of the input character
+    mov edx, [arg_len]                       ; Length of the character (1 byte)
+    syscall
+
+    mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    mov rsi, reset_color             ; Address of the input character
+    mov rdx, 4                        ; Length of the character (1 byte)
+    syscall
 
     mov rax, 1                        ; sys_write syscall
     mov rdi, 1                        ; STDOUT (file descriptor 1)
