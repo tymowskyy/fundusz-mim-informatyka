@@ -25,12 +25,31 @@ section .bss
     line_lengths  resd 1024         ; Lengths of each line
     num_lines     resd 1            ; Total lines
     current_line  resd 1            ; Which line cursor is on
+    arg_len resd 1
+    arg_point resq 1
 
 
 section .text
     global _start
 
 _start:
+    mov rbx, rsp              ; save stack pointer
+    mov rdi, [rbx]            ; argc
+    cmp rdi, 2                ; check if argc >= 2
+    jl .no_arg
+    mov rsi, [rbx + 16]       ; argv[1] is at [rsp + 8*2] = [rbx + 16]
+
+    ; Get string length
+    mov rdi, rsi              ; rdi = pointer to string
+    mov [arg_point], rsi
+    call strlen
+
+    ; write(1, argv[1], len)
+    mov dword [arg_len], eax
+
+.no_arg:
+
+
     mov rax, 1              ; sys_write
     mov rdi, 1              ; file descriptor: STDOUT
     mov rsi, show_cursor    ; pointer to the string
@@ -327,9 +346,57 @@ _start:
     lea rdx, [rel orig_termios_buf]
     syscall
 
+
+    mov     rax, 2              ; sys_open
+    mov     rdi, [arg_point]       ; filename
+    mov     rsi, 0x241          ; O_WRONLY | O_CREAT | O_TRUNC = 0x1 | 0x40 | 0x200 = 0x241
+    mov     rdx, 0o644          ; file permission
+    syscall
+    mov     r12, rax            ; save file descriptor
+
+    mov r8, 0
+.save_loop:
+
+    mov rax, 1
+    mov rdi, r12
+    mov rsi, [line_pointers + 8*r8]
+    mov edx, [line_lengths + 4*r8]
+    syscall
+    mov rax, 1
+    mov rdi, r12
+    mov rsi, nl
+    mov rdx, 1
+    syscall
+    inc r8
+    cmp r8, 4
+    jl .save_loop
+
+    ; sys_close(fd)
+    mov     rax, 3              ; sys_close
+    mov     rdi, r12
+    syscall
+
+    ; sys_exit(0)
+    mov     rax, 60             ; sys_exit
+    xor     rdi, rdi            ; status = 0
+    syscall
+
+
     ; Exit
     mov rax, 60                      ; syscall: exit
     xor rdi, rdi
     syscall
 
 
+strlen:
+    push rdi
+    xor rcx, rcx
+.next:
+    cmp byte [rdi + rcx], 0
+    je .done
+    inc rcx
+    jmp .next
+.done:
+    mov rax, rcx
+    pop rdi
+    ret
