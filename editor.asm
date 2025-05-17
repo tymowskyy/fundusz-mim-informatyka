@@ -17,6 +17,7 @@ section .data
     save_cursor db 27, '[s', 0
     restore_cursor db 27, '[u', 0
     clear_line db 27, '[2K', 0
+
     
 section .bss
     lines_buffer  resb 1024 * 22
@@ -177,7 +178,7 @@ _start:
     cmp dword [current_line], 0
     je .loop_input
     dec dword [current_line]
-    jmp .loop_input
+    jmp .set_cursor_col
 
 .arrow_down:
     mov rax, 1
@@ -187,7 +188,22 @@ _start:
     syscall
 
     inc dword [current_line]
-    jmp .loop_input
+    jmp .set_cursor_col
+
+.set_cursor_col:
+    mov edi, [current_line]
+    mov r8d, [line_lengths + 4*rdi]
+    .loop_cursor_move:
+    cmp [cursor_col], r8d
+    jle .loop_input
+    dec dword [cursor_col]
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, left
+    mov rdx, 3
+    syscall
+    jmp .loop_cursor_move
+
 .backspace:
     mov ecx, [current_line]
 
