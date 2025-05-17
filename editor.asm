@@ -17,6 +17,7 @@ section .data
     save_cursor db 27, '[s', 0
     restore_cursor db 27, '[u', 0
     clear_line db 27, '[2K', 0
+    displayed_lines_num dd 8
 
     
 section .bss
@@ -27,12 +28,15 @@ section .bss
     current_line  resd 1            ; Which line cursor is on
     arg_len resd 1
     arg_point resq 1
+    top_line resd 1
+    cursor_line resd 1
 
 
 section .text
     global _start
 
 _start:
+    mov dword [num_lines], 20
     mov rbx, rsp              ; save stack pointer
     mov rdi, [rbx]            ; argc
     cmp rdi, 2                ; check if argc >= 2
@@ -188,33 +192,55 @@ _start:
     jmp .loop_input
 
 .arrow_up:
+    cmp dword [current_line], 0
+    je .loop_input
+
+    dec dword [current_line]
+    cmp dword [cursor_line], 0
+    je .scroll_up
+
+    dec dword [cursor_line]
+
     mov rax, 1
     mov rdi, 1
     mov rsi, up
     mov rdx, 3
     syscall
 
-    cmp dword [current_line], 0
-    je .loop_input
-    dec dword [current_line]
+    jmp .set_cursor_col
+.scroll_up:
+    dec dword [top_line]
     jmp .set_cursor_col
 
+
 .arrow_down:
+    inc dword [current_line]
+
+    mov eax, [cursor_line]
+    inc dword eax
+    cmp eax, [displayed_lines_num]
+    jge .scroll_down
+
+    inc dword [cursor_line]
     mov rax, 1
     mov rdi, 1
     mov rsi, down
     mov rdx, 3
     syscall
-
-    inc dword [current_line]
     jmp .set_cursor_col
+
+.scroll_down:
+    inc dword [top_line]
+    jmp .set_cursor_col
+
+
 
 .set_cursor_col:
     mov edi, [current_line]
     mov r8d, [line_lengths + 4*rdi]
     .loop_cursor_move:
     cmp [cursor_col], r8d
-    jle .loop_input
+    jle .print_lines
     dec dword [cursor_col]
     mov rax, 1
     mov rdi, 1
@@ -251,6 +277,12 @@ _start:
     jmp .print_lines
 
 .handle_char:
+
+    mov rax, 1                        ; sys_write syscall
+    mov rdi, 1                        ; STDOUT (file descriptor 1)
+    mov rsi, right             ; Address of the input character
+    mov rdx, 3                        ; Length of the character (1 byte)
+    syscall    
     ; Handle normal characters here (store to buffer, print, etc.)
     ; Example:
     mov ecx, [current_line]
@@ -292,7 +324,10 @@ _start:
     mov rdx, 3              ; length of the ANSI code
     syscall
 
-    mov r8, 0
+    mov r8d, [top_line]
+    mov r9, r8
+    add r9d, [displayed_lines_num]
+    
 .print_loop:
     mov rax, 1                        ; sys_write syscall
     mov rdi, 1                        ; STDOUT (file descriptor 1)
@@ -311,7 +346,7 @@ _start:
     mov rdx, 1
     syscall
     inc r8
-    cmp r8, 4
+    cmp r8, r9
     jl .print_loop
 
 
@@ -321,14 +356,7 @@ _start:
     mov rdx, 3                        ; Length of the character (1 byte)
     syscall
     
-    cmp byte [input_char], '`'
-    je .loop_input
 
-    mov rax, 1                        ; sys_write syscall
-    mov rdi, 1                        ; STDOUT (file descriptor 1)
-    mov rsi, right             ; Address of the input character
-    mov rdx, 3                        ; Length of the character (1 byte)
-    syscall    
 
     jmp .loop_input
 
@@ -368,7 +396,7 @@ _start:
     mov rdx, 1
     syscall
     inc r8
-    cmp r8, 4
+    cmp r8d, [num_lines]
     jl .save_loop
 
     ; sys_close(fd)
