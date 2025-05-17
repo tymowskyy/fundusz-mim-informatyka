@@ -315,6 +315,11 @@ _start:
 
 
 .restore_and_exit:
+    mov rax, 1              ; sys_write
+    mov rdi, 1              ; file descriptor: STDOUT
+    mov rsi, clear    ; pointer to the string
+    mov rdx, 7              ; length of the ANSI code
+    syscall
     ; Restore original terminal settings (TCSETS)
     mov rax, 16
     mov rdi, 0
